@@ -1,0 +1,432 @@
+import sys
+import math
+import time
+import random
+from machine import Pin, PWM
+#
+
+# The OLED screen ranges from (0,0) to (127,63)
+# The center of the screen is (63,31)
+#
+#
+#
+
+if len(sys.argv) > 1:  # pass any paramter to run this on a host
+    ESP = 0            #  vs running on the ESP32
+else:
+    ESP  = 1
+
+
+if ESP:   # stuff specific to ESP32
+
+ from machine import I2C, Pin
+ import ssd1306
+
+
+ rst = Pin(16, Pin.OUT)
+ rst.value(1)
+ scl = Pin(15, Pin.OUT, Pin.PULL_UP)
+ sda = Pin(4, Pin.OUT, Pin.PULL_UP)
+ i2c = I2C(scl=scl, sda=sda, freq=450000)
+ oled = ssd1306.SSD1306_I2C(128, 64, i2c, addr=0x3c)
+
+ oled.fill(0)
+
+
+ def plot2(a,b):
+  x = int(a)
+  y = int(b)
+
+  #y2 = 63-y
+  y2 = y
+
+  oled.pixel(x,y2,1)
+
+
+
+def disp_note(x,note,length):        
+   #
+   # (x,y)  is the position of the note on the score
+   # tone   is the note (e,g,b,d,etc)
+   # length is half, whole, eighth, etc
+   #
+
+   note_position = {
+                     'g3':56,
+                     'c4':56,
+                     'd4':49, 
+                     'e4':46,
+                     'f4':42,
+                     'g4':39,
+                     'a4':35,
+                     'b4':32,
+                     'c5':28,
+                     'd5':25,
+                     'e5':21,
+                     'f5':18,
+                     'g5':14,
+                     'a5':10 }
+   if note == "rest":
+      return
+
+   y = note_position[note]
+   open_note =   [0,112,136,136,136,112]
+   closed_note = [0,112,248,248,248,112]
+
+   row = 0
+   type = 1 # assume it's a closed (solid) note
+   if (length == "half") | (length == "whole"):
+        type = 0
+ 
+   width = int(len(open_note)/2) # either open or closed note
+   for i in range(3):  # row of note, also row+3
+     bitpattern = 128
+     for j in range(8):
+        if type:
+            pattern = closed_note[i]
+        else:
+            pattern = open_note[i]
+        if (pattern  & bitpattern):
+                    plot2(x-3+j,y-2+i)
+        bitpattern = bitpattern >> 1
+
+     bitpattern = 128 
+     for j in range(8):
+        if type:
+            pattern = closed_note[i+3]
+        else:
+            pattern = open_note[i+3]
+
+        if (pattern & bitpattern):
+                    plot2(x-3+j,y+1+i)
+        bitpattern = bitpattern >> 1
+
+   if (note == "c4") | (note == "a5"):
+      # line thru note
+      for i in range(6):
+       plot2(x+i-1,y+1)
+       plot2(x-i-1,y+1)
+
+
+   if (length != "whole"):
+      note_line(x,y,length,1)
+
+def note_line(x,y,length,dir=1):    # (x,y) represents ceter of note
+      for i in range(13):
+         if dir:
+             plot2(x+1,y-i)
+         else:
+             plot2(x-3,y+i)
+    
+      if length == "eighth":
+         lines = 1
+      elif length == "sixteenth":
+         lines = 2
+      else:
+         lines = 0
+ 
+      if lines >= 1:
+        plot2(x+2,y-12 );
+        plot2(x+3,y-12 );
+        plot2(x+4,y-12 );
+        plot2(x+5,y-12 );
+        plot2(x+6,y-11 );
+        plot2(x+7,y-10 );
+        plot2(x+8,y-9 );
+        plot2(x+8,y-8 );
+        plot2(x+8,y-7 );
+        plot2(x+8,y-6 );
+
+      # lines = 2
+      if lines == 2:
+        plot2(x+2,y-9);
+        plot2(x+3,y-9);
+        plot2(x+4,y-9);
+        plot2(x+5,y-8);
+        plot2(x+6,y-7);
+        plot2(x+6,y-6);
+        plot2(x+6,y-5);
+        
+def add_more(x):
+ for i in range(18,47,7):
+     line(x,i,x+note_width,i)
+
+
+def line(x1,y1,x2,y2):
+#
+# Implementation of Bresenham's line algorithm
+#  (see: https://rosettacode.org/wiki/Bitmap/Bresenham%27s_line_algorithm)
+#
+#
+   deltax = abs(x2-x1)
+   signx = -1
+   if x1< x2:
+      signx = 1
+
+   deltay = abs(y2-y1)
+   signy = -1
+   if y1< y2:
+       signy = 1
+
+   er = 0-deltay
+
+   if deltax > deltay:
+      er = deltax
+
+   er = int(er/2)
+
+   for _ in range(1000):   # plot up to 1000 points
+    plot2(x1,y1)           # just an easy way to loop
+
+    if ((x1 == x2) & (y1 == y2)):
+       return
+
+    e2 = er
+
+    if (e2 > (0-deltax)):
+       er = er -  deltay
+       x1 = x1 + signx
+
+    if e2 < deltay:
+       er = er + deltax
+       y1 = y1 + signy
+
+
+def bar(x):
+   line(x,15,x,51) 
+   line(x+1,15,x+1,51) 
+   line(x+2,15,x+2,51) 
+    
+   for i in range(18,47,7):
+     line(x,i,x+40,i)
+
+def clef(x,y):    # (x,y) is upper lefthand corner
+ a = [
+     [2,0],
+     [7,0],
+     [7,0],
+     [13,128],
+     [12,128],
+     [9,128],
+     [9,128],
+     [9,0],
+     [9,0],
+     [11,0],
+     [6,0],
+     [14,0],
+     [30,0],
+     [58,0],
+     [52,0],
+     [100,0],
+     [231,128],
+     [207,192],
+     [154,224],
+     [154,96],
+     [90,96],
+     [73,96],
+     [97,64],
+     [49,192],
+     [15,0],
+     [0,128],
+     [0,128],
+     [0,128],
+     [0,128],
+     [28,128],
+     [60,128],
+     [60,128],
+     [25,0],
+     [14,0]
+    ]
+
+ for i in range(len(a)):
+     bitpattern = 128
+     for j in range(8):
+         pattern = a[i][0]
+         pattern2 = a[i][1]
+         if (pattern & bitpattern):
+              plot2(x+j,y)
+
+    	 if (pattern2 & bitpattern):
+              plot2(x+j+8,y)
+
+         bitpattern = bitpattern >> 1
+     y=y+1
+
+# constants
+
+note_width = 8 + 12 # 8 bits wide plus margins
+first_note = 40 
+tempo = .5
+
+#
+#
+#
+
+note_pos = first_note
+
+clef(10,20)
+bar(2)
+#disp_note(note_pos,"e4","eighth")
+oled.show()
+time.sleep(5)
+# sys.exit()
+
+ 
+
+# oled.show()
+
+
+duration = {
+    'whole': 1,
+    'half': .5,
+    'dotted-half': .75,
+    'dot-half': .75,
+    'quarter': .25,
+    'dotted-quarter':.40,
+    'eighth': .125,
+    'sixteenth': .06 }
+
+tones = {
+    'g3': 196,
+    'c4': 262,
+    'c4s':277,
+    'd4': 294,
+    'd4s': 311,
+    'e4': 330,
+    'f4': 349,
+    'f4s': 370,
+    'g4': 392,
+    'g4s': 415,
+    'a4': 440,
+    'a4s': 466,
+    'b4': 494,
+    'b4s': 494,
+    'c5': 523,
+    'c5s':554,
+    'd5':587,
+    'd5s':622,
+    'e5':659,
+    'f5':698,
+    'f5s':740,
+    'g5':784,
+    'g5s':831,
+    'a5':880,
+    'rest': 0,
+}
+
+
+song = [
+        ['e4','quarter'],
+        ['e4','quarter'],
+        ['f4','quarter'],
+        ['g4','quarter'],
+
+        ['g4','quarter'],
+        ['f4','quarter'],
+        ['e4','quarter'],
+        ['d4','quarter'],
+
+        ['c4','quarter'],
+        ['c4','quarter'],
+        ['d4','quarter'],
+        ['e4','quarter'],
+
+        ['e4','dotted-quarter'],
+        ['d4','eighth'],
+        ['d4','half'],
+
+
+        ['e4','quarter'],   # second page
+        ['e4','quarter'],
+        ['f4','quarter'],
+        ['g4','quarter'],
+
+
+        ['g4','quarter'],
+        ['f4','quarter'],
+        ['e4','quarter'],
+        ['d4','quarter'],
+
+
+        ['c4','quarter'],
+        ['c4','quarter'],
+        ['d4','quarter'],
+        ['e4','quarter'],
+
+
+        ['d4','dotted-quarter'],
+        ['c4','eighth'],
+        ['c4','half'],
+
+        ['d4','quarter'],
+        ['d4','quarter'],
+        ['e4','quarter'],
+        ['c4','quarter'],
+
+        ['d4','quarter'],
+        ['e4','eighth'],
+        ['f4','eighth'],
+        ['e4','quarter'],
+        ['c4','quarter'],
+
+        ['d4','quarter'],
+        ['e4','eighth'],
+        ['f4','eighth'],
+        ['e4','quarter'],
+        ['d4','quarter'],
+
+        ['c4','quarter'],
+        ['d4','quarter'],
+        ['g3','half'],
+        # ['rest','half'],
+
+        ['e4','quarter'],
+        ['e4','quarter'],
+        ['f4','quarter'],
+        ['g4','quarter'],
+
+        ['g4','quarter'],
+        ['f4','quarter'],
+        ['e4','quarter'],
+        ['d4','quarter'],
+
+        ['c4','quarter'],
+        ['c4','quarter'],
+        ['d4','quarter'],
+        ['e4','quarter'],
+
+        ['d4','dotted-quarter'],
+        ['c4','eighth'],
+        ['c4','half'],
+
+
+
+      ]
+
+beeper = PWM(Pin(13, Pin.OUT), freq=440, duty=512)
+beats = 0
+
+for i in song: 
+   disp_note(note_pos,i[0],i[1])
+   beats = beats + duration[ i[1] ]
+   
+   add_more(note_pos) 
+   note_pos = note_pos + note_width 
+   if note_pos >=  120:
+      x = note_pos - 100
+      note_pos = 120 - note_width 
+      
+      for j in range(note_width):
+         oled.scroll(-1,0)
+   else:
+      for j in range(note_width):
+         time.sleep(.005) 
+
+   oled.show()
+
+   beeper.freq(tones[ i[0] ])
+   time.sleep( duration[ i[1] ] * tempo )
+
+oled.show()
+beeper.deinit()
+time.sleep(2)
