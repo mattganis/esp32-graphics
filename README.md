@@ -48,6 +48,11 @@ between 2 and 20
 
 o run it, again use ampy with: `ampy --port /dev/tty.SLAB_USBtoUART run polar.py`
 
+## note4
+
+ok, ok - it's not quite "music" but I had some fun with this one.  This play's "Ode to Joy" (Beethoven) but displays the score on the ESP's display.  Requires a piezo speaker attached to pin 13 
+
+
 ## Note:
 
 All of the code is written so you it can be run on both the ESP32 and a laptop running python3.  If you run the 
