@@ -1,4 +1,4 @@
-# ESP32 Graping examples
+# ESP32 Graphing examples
 
 Included are three examples of pixel based graphics for the ESP32 and OLED display (specifically I'm using 
 the ESP32 from HELTEC - which has a built in OLED display).
